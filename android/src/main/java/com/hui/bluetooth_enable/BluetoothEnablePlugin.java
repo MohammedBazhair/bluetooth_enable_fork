@@ -8,8 +8,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.util.Log;
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.core.app.ActivityCompat;
 
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
@@ -19,9 +17,10 @@ import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
+import io.flutter.plugin.common.PluginRegistry.ActivityResultListener;
 
-/** FlutterBluePlugin updated for Activity Result API */
-public class BluetoothEnablePlugin implements FlutterPlugin, ActivityAware, MethodCallHandler {
+/** FlutterBluePlugin Fork Updated for Compatibility */
+public class BluetoothEnablePlugin implements FlutterPlugin, ActivityAware, MethodCallHandler, ActivityResultListener {
     private static final String TAG = "BluetoothEnablePlugin";
 
     private Activity activity;
@@ -30,7 +29,7 @@ public class BluetoothEnablePlugin implements FlutterPlugin, ActivityAware, Meth
     private BluetoothAdapter mBluetoothAdapter;
     private Result pendingResult;
 
-    private ActivityResultLauncher<Intent> enableBluetoothLauncher;
+    private static final int REQUEST_ENABLE_BLUETOOTH = 1;
 
     @Override
     public void onAttachedToEngine(FlutterPlugin.FlutterPluginBinding binding) {
@@ -50,18 +49,8 @@ public class BluetoothEnablePlugin implements FlutterPlugin, ActivityAware, Meth
         this.mBluetoothManager = (BluetoothManager) this.activity.getSystemService(Context.BLUETOOTH_SERVICE);
         this.mBluetoothAdapter = mBluetoothManager.getAdapter();
 
-        // Register new Activity Result Launcher
-        enableBluetoothLauncher = binding.getActivity().registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                result -> {
-                    if (pendingResult == null) return;
-                    if (result.getResultCode() == Activity.RESULT_OK) {
-                        pendingResult.success("true");
-                    } else {
-                        pendingResult.success("false");
-                    }
-                }
-        );
+        // Register ActivityResultListener
+        binding.addActivityResultListener(this);
     }
 
     @Override
@@ -89,7 +78,7 @@ public class BluetoothEnablePlugin implements FlutterPlugin, ActivityAware, Meth
     @Override
     public void onMethodCall(MethodCall call, Result result) {
         if (mBluetoothAdapter == null && !"isAvailable".equals(call.method)) {
-            result.error("bluetooth_unavailable", "the device does not have bluetooth", null);
+            result.error("bluetooth_unavailable", "Device does not have Bluetooth", null);
             return;
         }
 
@@ -102,7 +91,7 @@ public class BluetoothEnablePlugin implements FlutterPlugin, ActivityAware, Meth
             case "enableBluetooth":
                 Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
                 pendingResult = result;
-                enableBluetoothLauncher.launch(enableBtIntent);
+                activity.startActivityForResult(enableBtIntent, REQUEST_ENABLE_BLUETOOTH);
                 break;
 
             case "customEnable":
@@ -122,5 +111,21 @@ public class BluetoothEnablePlugin implements FlutterPlugin, ActivityAware, Meth
                 result.notImplemented();
                 break;
         }
+    }
+
+    @Override
+    public boolean onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQUEST_ENABLE_BLUETOOTH) {
+            if (pendingResult == null) {
+                Log.d(TAG, "onActivityResult: pendingResult is null");
+            } else {
+                if (resultCode == Activity.RESULT_OK) {
+                    pendingResult.success("true");
+                } else {
+                    pendingResult.success("false");
+                }
+            }
+        }
+        return false;
     }
 }
